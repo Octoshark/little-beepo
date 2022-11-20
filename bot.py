@@ -129,7 +129,7 @@ async def slash_tstart(interaction: discord.Interaction):
     if bTestActive == True:
         msg = "Test already active, stop it first."
     else:
-        msg = "Test started, type !join to check in."
+        msg = "Test started, use /join command to check in."
         bTestActive = True
         testers.clear()
 
