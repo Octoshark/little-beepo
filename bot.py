@@ -48,48 +48,48 @@ async def slash_misery(interaction: discord.Interaction):
 # /tclclear
 @tree.command(guild = None, name = 'tclclear', description='Remove all changes.')
 async def slash_tclclear(interaction: discord.Interaction):
-        test_changes.clear()
-        msg = "All changes cleared."
+    test_changes.clear()
+    msg = "All changes cleared."
 
-        await interaction.response.send_message(msg)
+    await interaction.response.send_message(msg)
 
 # /tcl
 @tree.command(guild = None, name = 'tcl', description='List changes for next test.')
 async def slash_tcl(interaction: discord.Interaction):
-        if len(test_changes) == 0:
-            msg = "Changes to test:\nNone.\n"
-        else:
-            bSplit = False
-            tag = "```"
-            tagSize = 2 * len(tag)
-            header = "Changes to test:\n"
-            msgMax = 2000 - (len(header) - tagSize)
-            n = 0
-            content = ""
+    if len(test_changes) == 0:
+        msg = "Changes to test:\nNone.\n"
+    else:
+        bSplit = False
+        tag = "```"
+        tagSize = 2 * len(tag)
+        header = "Changes to test:\n"
+        msgMax = 2000 - (len(header) - tagSize)
+        n = 0
+        content = ""
 
-            for x in test_changes:
-                entry = f"{n}. " + x.change + f" (Added by: {x.author})\n"
-                n += 1
+        for x in test_changes:
+            entry = f"{n}. " + x.change + f" (Added by: {x.author})\n"
+            n += 1
 
-                if len(content) + len(entry) >= msgMax:
-                    if bSplit == False:
-                        msg = header + tag + content + tag
-                    else:
-                        msg = tag + content + tag
+            if len(content) + len(entry) >= msgMax:
+                if bSplit == False:
+                    msg = header + tag + content + tag
+                else:
+                    msg = tag + content + tag
 
-                    await interaction.response.send_message(msg, ephemeral = False)
+                await interaction.response.send_message(msg, ephemeral = False)
 
-                    bSplit = True
-                    content = ""
+                bSplit = True
+                content = ""
 
-                content += entry
+            content += entry
 
-            if bSplit == False:
-                msg = header + tag + content + tag
-            elif len(content) > 0:
-                msg = tag + content + tag
+        if bSplit == False:
+            msg = header + tag + content + tag
+        elif len(content) > 0:
+            msg = tag + content + tag
 
-        await interaction.response.send_message(msg, ephemeral = False)
+    await interaction.response.send_message(msg, ephemeral = False)
 
 # /tca
 @tree.command(guild = None, name = 'tca', description='Add test change by list index. Ex: /tca Modified a model, map, functionality, etc...')
