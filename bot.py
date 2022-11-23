@@ -45,14 +45,6 @@ tree = app_commands.CommandTree(client)
 async def slash_misery(interaction: discord.Interaction):
     await interaction.response.send_message(f"Litte Beepo's misery is increasing.", ephemeral = True)
 
-# /tclclear
-@tree.command(guild = None, name = 'tclclear', description='Remove all changes.')
-async def slash_tclclear(interaction: discord.Interaction):
-    test_changes.clear()
-    msg = "All changes cleared."
-
-    await interaction.response.send_message(msg)
-
 # /tcl
 @tree.command(guild = None, name = 'tcl', description='List changes for next test.')
 async def slash_tcl(interaction: discord.Interaction):
@@ -100,6 +92,17 @@ async def slash_tca(interaction: discord.Interaction, change: str):
 
     await interaction.response.send_message(msg)
 
+# /tce
+@tree.command(guild = None, name = 'tce', description='Edit existing test change by list index. Ex: /tce 0 Fix a typo...')
+async def slash_tce(interaction: discord.Interaction, index: int, change: str):
+    if index >= len(test_changes) or index < 0:
+        msg = "Index out of range."
+    else:
+        test_changes[index].change = change
+        msg = f"Edited change #{index}: {test_changes[index].change}"
+
+    await interaction.response.send_message(msg)
+
 # /tcr
 @tree.command(guild = None, name = 'tcr', description='Remove test change by list index. Ex: /tcr 1')
 async def slash_tcr(interaction: discord.Interaction, index: int):
@@ -111,14 +114,11 @@ async def slash_tcr(interaction: discord.Interaction, index: int):
 
     await interaction.response.send_message(msg)
 
-# /tce
-@tree.command(guild = None, name = 'tce', description='Edit existing test change by list index. Ex: /tce 0 Fix a typo...')
-async def slash_tce(interaction: discord.Interaction, index: int, change: str):
-    if index >= len(test_changes) or index < 0:
-        msg = "Index out of range."
-    else:
-        test_changes[index].change = change
-        msg = f"Edited change #{index}: {test_changes[index].change}"
+# /tcpurge
+@tree.command(guild = None, name = 'tcpurge', description='Remove all changes.')
+async def slash_tclclear(interaction: discord.Interaction):
+    test_changes.clear()
+    msg = "All changes cleared."
 
     await interaction.response.send_message(msg)
 
