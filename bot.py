@@ -5,16 +5,16 @@ import discord
 from discord import app_commands
 
 class TestChange:
-  def __init__(self, change, author):
-    self.change = change
-    self.author = author
+    def __init__(self, change, author):
+        self.change = change
+        self.author = author
 
 class Tester:
-  def __init__(self, id, name, jointime):
-    self.id = id
-    self.name = name
-    self.jointime = jointime
-    self.endtime = -1
+    def __init__(self, id, name, jointime):
+        self.id = id
+        self.name = name
+        self.jointime = jointime
+        self.endtime = -1
 
 bTestActive = False
 test_changes = []
@@ -26,27 +26,28 @@ intents = discord.Intents.default()
 
 class aclient(discord.Client):
     def __init__(self):
-        super().__init__(intents = intents)
+        super().__init__(intents=intents)
         self.synced = False
 
     async def on_ready(self):
         await self.wait_until_ready()
         if not self.synced:
-            await tree.sync(guild = None)
+            await tree.sync(guild=None)
             self.synced = True
         print(f"We have logged in as {self.user}.")
+
 
 client = aclient()
 
 tree = app_commands.CommandTree(client)
 
 # test slash commands
-@tree.command(guild = None, name = 'misery', description='Increase misery. (Use with care!)')
+@tree.command(guild=None, name='misery', description='Increase misery. (Use with care!)')
 async def slash_misery(interaction: discord.Interaction):
-    await interaction.response.send_message(f"Litte Beepo's misery is increasing.", ephemeral = True)
+    await interaction.response.send_message(f"Little Beepo's misery is increasing.", ephemeral=True)
 
 # /tcl
-@tree.command(guild = None, name = 'tcl', description='List changes for next test.')
+@tree.command(guild=None, name='tcl', description='List changes for next test.')
 async def slash_tcl(interaction: discord.Interaction):
     if len(test_changes) == 0:
         msg = "Changes to test:\nNone.\n"
@@ -69,7 +70,7 @@ async def slash_tcl(interaction: discord.Interaction):
                 else:
                     msg = tag + content + tag
 
-                await interaction.response.send_message(msg, ephemeral = False)
+                await interaction.response.send_message(msg, ephemeral=False)
 
                 bSplit = True
                 content = ""
@@ -81,10 +82,10 @@ async def slash_tcl(interaction: discord.Interaction):
         elif len(content) > 0:
             msg = tag + content + tag
 
-    await interaction.response.send_message(msg, ephemeral = False)
+    await interaction.response.send_message(msg, ephemeral=False)
 
 # /tca
-@tree.command(guild = None, name = 'tca', description='Add test change by list index. Ex: /tca Modified a model, map, functionality, etc...')
+@tree.command(guild=None, name='tca', description='Add test change by list index. Ex: /tca Modified a model, map, functionality, etc...')
 async def slash_tca(interaction: discord.Interaction, change: str):
     new_change = TestChange(change, interaction.user.display_name)
     test_changes.append(new_change)
@@ -93,7 +94,7 @@ async def slash_tca(interaction: discord.Interaction, change: str):
     await interaction.response.send_message(msg)
 
 # /tce
-@tree.command(guild = None, name = 'tce', description='Edit existing test change by list index. Ex: /tce 0 Fix a typo...')
+@tree.command(guild=None, name='tce', description='Edit existing test change by list index. Ex: /tce 0 Fix a typo...')
 async def slash_tce(interaction: discord.Interaction, index: int, change: str):
     if index >= len(test_changes) or index < 0:
         msg = "Index out of range."
@@ -104,7 +105,7 @@ async def slash_tce(interaction: discord.Interaction, index: int, change: str):
     await interaction.response.send_message(msg)
 
 # /tcr
-@tree.command(guild = None, name = 'tcr', description='Remove test change by list index. Ex: /tcr 1')
+@tree.command(guild=None, name='tcr', description='Remove test change by list index. Ex: /tcr 1')
 async def slash_tcr(interaction: discord.Interaction, index: int):
     if index >= len(test_changes) or index < 0:
         msg = "Index out of range."
@@ -115,15 +116,15 @@ async def slash_tcr(interaction: discord.Interaction, index: int):
     await interaction.response.send_message(msg)
 
 # /tcpurge
-@tree.command(guild = None, name = 'tcpurge', description='Remove all changes.')
-async def slash_tclclear(interaction: discord.Interaction):
+@tree.command(guild=None, name='tcpurge', description='Remove all changes.')
+async def slash_tcpurge(interaction: discord.Interaction):
     test_changes.clear()
     msg = "All changes cleared."
 
     await interaction.response.send_message(msg)
 
 # /tstart
-@tree.command(guild = None, name = 'tstart', description='Start tracking a test.')
+@tree.command(guild=None, name='tstart', description='Start tracking a test.')
 async def slash_tstart(interaction: discord.Interaction):
     global bTestActive
     if bTestActive == True:
@@ -136,7 +137,7 @@ async def slash_tstart(interaction: discord.Interaction):
     await interaction.response.send_message(msg)
 
 # /tstop
-@tree.command(guild = None, name = 'tstop', description='Stop tracking a test.')
+@tree.command(guild=None, name='tstop', description='Stop tracking a test.')
 async def slash_tstop(interaction: discord.Interaction):
     global bTestActive
     if bTestActive == False:
@@ -160,7 +161,7 @@ async def slash_tstop(interaction: discord.Interaction):
     await interaction.response.send_message(msg)
 
 # /join
-@tree.command(guild = None, name = 'join', description='Join an active test.')
+@tree.command(guild=None, name='join', description='Join an active test.')
 async def slash_join(interaction: discord.Interaction):
     global bTestActive
     if bTestActive == False:
@@ -180,14 +181,15 @@ async def slash_join(interaction: discord.Interaction):
 
         if bJoined == False:
             now = int(time.time())
-            entry = Tester(interaction.user.id, interaction.user.display_name, now)
+            entry = Tester(interaction.user.id,
+                           interaction.user.display_name, now)
             testers.append(entry)
             msg = f"{interaction.user.display_name} joined the test."
 
     await interaction.response.send_message(msg)
 
 # /leave
-@tree.command(guild = None, name = 'leave', description='Leave an active test.')
+@tree.command(guild=None, name='leave', description='Leave an active test.')
 async def slash_leave(interaction: discord.Interaction):
     global bTestActive
     if bTestActive == False:
@@ -200,5 +202,5 @@ async def slash_leave(interaction: discord.Interaction):
         msg = f"{interaction.user.display_name} left the test."
 
     await interaction.response.send_message(msg)
-        
+
 client.run(token)
