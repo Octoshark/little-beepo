@@ -36,7 +36,6 @@ class aclient(discord.Client):
             self.synced = True
         print(f"We have logged in as {self.user}.")
 
-
 client = aclient()
 
 tree = app_commands.CommandTree(client)
