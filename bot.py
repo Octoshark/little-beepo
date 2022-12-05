@@ -202,4 +202,16 @@ async def slash_leave(interaction: discord.Interaction):
 
     await interaction.response.send_message(msg)
 
+# /pingrole
+# hardcoded right now :)
+@tree.command(guild=None, name='pingrole', description='Mention tester role.')
+async def slash_pingrole(interaction: discord.Interaction):
+    role = discord.utils.find(lambda r: r.name == 'Test Coordinator', interaction.guild.roles)
+    if role in interaction.user.roles:
+        msg = f"<@&307979412903821323> <@&1049422754602025053> Test starting soon."
+    else:
+        msg = "You have no access to this command."
+    
+    await interaction.response.send_message(msg)
+
 client.run(token)
