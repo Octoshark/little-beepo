@@ -138,7 +138,7 @@ def logaddress_listen_thread(stop) -> None:
             if type == 0x52: # Default is 0x52, 0x53 is used when a secret is set which we don't support yet (sv_logsecret)
                 body:str = data[5:].decode("utf-8")[0:-1] # Decode and discard null terminator
             
-				# FIXME: This responds to chat messages as well!!
+                # FIXME: This responds to chat messages as well!!
                 if body.find("disconnected") != -1:
                     player_info:PlayerInfo = get_player_info_from_log(body)
                     if not player_info.userid == -1 and not player_info.playerid == "BOT":
@@ -166,8 +166,8 @@ class aclient(discord.Client):
     async def handle_task_playtest(self):
         stop_thread = False # TODO: Use threading.Event instead
 
-		# TODO: It should be possible to ditch using a thread and opt for coroutines with async/await
-		# The issue is the socket API on its own is not asynchronous
+        # TODO: It should be possible to ditch using a thread and opt for coroutines with async/await
+        # The issue is the socket API on its own is not asynchronous
         listen_thread = threading.Thread(target=logaddress_listen_thread, args=(lambda: stop_thread,))
         listen_thread.start()
 
