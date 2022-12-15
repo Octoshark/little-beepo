@@ -6,11 +6,18 @@ import socket
 import select
 import asyncio
 import queue
+import json
 import discord
 from discord import app_commands
 from discord.ext import tasks
 from enum import Enum
 from queue import Queue
+from rcon import rcon
+from threading import Thread, Lock
+
+class JoinStatus(Enum):
+    DISCONNECTED = 0
+    CONNECTED = 1
 
 class TestChange:
     def __init__(self, change, author):
@@ -18,44 +25,38 @@ class TestChange:
         self.author = author
 
 class Tester:
-    def __init__(self, steamid:str, name:str, jointime:int):
-        self.steamid = steamid
+    def __init__(self, networkid:str, name:str, jointime:int, status:JoinStatus):
+        self.networkid = networkid
         self.name = name
         self.jointime = jointime
         self.endtime = -1
-
-class JoinStatus(Enum):
-    DISCONNECTED = 0
-    CONNECTED = 1
+        self.status = status
 
 class PlayerJoinStatus:
-    def __init__(self, name:str, steamid:str, status:JoinStatus) -> None:
+    def __init__(self, name:str, networkid:str, status:JoinStatus) -> None:
         self.name = name
-        self.steamid = steamid
+        self.networkid = networkid
         self.status = status
 
 class PlayerInfo:
-    def __init__(self, name:str, playerid:str, userid:int) -> None:
+    def __init__(self, name:str, networkid:str, userid:int) -> None:
         self.name = name
-        self.playerid = playerid # SteamID or BOT
+        self.networkid = networkid # SteamID or BOT
         self.userid = userid
+
+class RCONInfo:
+    def __init__(self, address:str, port:int, password:str) -> None:
+        self.address = address
+        self.port = port
+        self.password = password
 
 bTestActive = False
 test_changes = []
 testers:dict = {}
+testers_mutex:Lock = Lock()
+rcon_infos:list = []
 
 token = os.getenv("DISCORD_TOKEN")
-
-listen_ip = os.getenv("LOGADDRESS_IP", "0.0.0.0") # 0.0.0.0 should bind to all addresses and work fine in most cases. If not, specify an appropriate local IP
-listen_port = os.getenv("LOGADDRESS_PORT", "-1")
-
-try:
-    listen_port = int(listen_port)
-except:
-    listen_port = -1
-
-if listen_port == -1:
-    print("WARNING: No valid port specified for logaddress protocol, please set LOGADDRESS_PORT environment variable.")
 
 testing_channel_id = os.getenv("PLAYTEST_CHANNELID", "-1")
 
@@ -67,88 +68,80 @@ except:
 if testing_channel_id == -1:
     print("WARNING: No channel ID specified to forward playtest messages to, please set PLAYTEST_CHANNELID environment variable.")
 
+try:
+    # TODO: Perhaps move the above environment variable stuff to this config?
+    file = open("config.json", 'r')
+    data:dict = json.load(file)
+
+    rcon_info:dict
+    for rcon_info in data["rcon"]:
+        # Append RCON information instead of creating an instance of 'rcon'
+        # As we don't know when a server is gonna go offline
+        rcon_infos.append(RCONInfo(
+            rcon_info["address"],
+            rcon_info["port"],
+            rcon_info["password"]
+        ))
+
+except IOError as e:
+    print(f"Failed to load config.json: {e}")
+    pass
+
 intents = discord.Intents.default()
-
-def get_player_info_from_log(log_string:str) -> PlayerInfo:
-    # This is a little tricky because the player name could have quotes and angle brackets
-    # So we have to be careful how we use them to figure out the player name
-    
-    # Format appears to be "Player Name<USERID><STEAMID or BOT><TEAMNAME>"
-    # Connection messages contain an empty team name, so it will be <>
-    # Disconnections and team joins will contain the team name
-
-    # Example connections
-    # L 12/05/2022 - 20:42:40: "Sveinn<9><BOT><>" connected, address "none"
-    # L 12/05/2022 - 21:00:06: "Spirrwell<11><[U:1:36987536]><>" connected, address "192.168.1.3:27005"
-
-    # Example disconnections
-    # L 12/05/2022 - 20:42:40: "Sveinn<9><BOT><Vikings>" disconnected (reason "Bot kicked by server")
-    # L 12/05/2022 - 21:00:27: "Spirrwell<11><[U:1:36987536]><Unassigned>" disconnected (reason "Disconnect by user.")
-    team_string_end = log_string.rfind(">")
-    team_string_begin = log_string.rfind("<", 0, team_string_end) + 1
-
-    playerid_end = log_string.rfind(">", 0, team_string_begin)
-    playerid_start = log_string.rfind("<", 0, playerid_end) + 1
-
-    userid_end = log_string.rfind(">", 0, playerid_start)
-    userid_start = log_string.rfind("<", 0, userid_end) + 1
-
-    playername_end = userid_start - 1
-    playername_start = log_string.find('"') + 1
-
-    try:
-        playerid:str = log_string[playerid_start:playerid_end]
-        userid:int = int(log_string[userid_start:userid_end])
-        playername:str = log_string[playername_start:playername_end]
-        return PlayerInfo(playername, playerid, userid)
-    except:
-        return PlayerInfo('', '', -1)
-
 
 player_status_queue:Queue = Queue()
 
-# This is the only decent documentation I could find of this protocol:
-# https://github.com/jackwilsdon/logaddress-protocol/blob/master/protocol.md
-def logaddress_listen_thread(stop) -> None:
-    if listen_port == -1:
-        return
-
-    listener = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
-    listener.bind((listen_ip, listen_port))
-    listener.setblocking(False)
-
-    while not stop():
-        ready_to_read, ready_to_write, in_error = select.select(
-            [listener],
-            [],
-            [],
-            1.0
-        )
-
-        if len(ready_to_read) == 0:
-            continue
-        
-        data, address = listener.recvfrom(65535) # Receive UDP max packet size
-
-        # Packet should theoretically always be greater than 6 bytes long, and should always start with 0xFFFFFFFF
-        if len(data) > 6 and int.from_bytes(data[0:4], "little", signed=True) == -1:
-            type = data[4]
-
-            if type == 0x52: # Default is 0x52, 0x53 is used when a secret is set which we don't support yet (sv_logsecret)
-                body:str = data[5:].decode("utf-8")[0:-1] # Decode and discard null terminator
-            
-                # FIXME: This responds to chat messages as well!!
-                if body.find("disconnected") != -1:
-                    player_info:PlayerInfo = get_player_info_from_log(body)
-                    if not player_info.userid == -1 and not player_info.playerid == "BOT":
-                        player_status_queue.put(PlayerJoinStatus(player_info.name, player_info.playerid, JoinStatus.DISCONNECTED))
-                elif body.find("connected") != -1:
-                    player_info:PlayerInfo = get_player_info_from_log(body)
-                    if not player_info.userid == -1 and not player_info.playerid == "BOT":
-                        player_status_queue.put(PlayerJoinStatus(player_info.name, player_info.playerid, JoinStatus.CONNECTED))
-
+class RCONThread(Thread):
+    def __init__(self):
+        super().__init__()
+        self.should_stop = threading.Event()
     
+    def stop(self):
+        self.should_stop.set()
+
+    def run(self) -> None:
+        while not self.should_stop.is_set():
+            for info in rcon_infos:
+                player_info:list = rcon(info.address, info.port, info.password, silent=True).exec_command("player_info").splitlines()
+
+                NETWORKID:int = 0
+                USERID:int = 1
+
+                player_data:dict = {}
+
+                for line in player_info:
+                    split_line:list = line.split()
+                    if not split_line[NETWORKID].startswith("[U:"):
+                        continue
+                    
+                    player_name_start:int = len(split_line[NETWORKID]) + len(split_line[USERID]) + 2 # Plus 2 for spaces
+                    player_data[split_line[NETWORKID]] = PlayerInfo(
+                        line[player_name_start:],
+                        split_line[NETWORKID],
+                        split_line[USERID]
+                    )
+
+                testers_mutex.acquire()
+
+                for networkid in testers:
+                    if networkid not in player_data:
+                        tester:Tester = testers[networkid]
+                        if tester.status != JoinStatus.DISCONNECTED:
+                            player_status_queue.put(PlayerJoinStatus(tester.name, tester.networkid, JoinStatus.DISCONNECTED))
+                
+                for networkid in player_data:
+                    player_info:PlayerInfo = player_data[networkid]
+                    if networkid not in testers:
+                        player_status_queue.put(PlayerJoinStatus(player_info.name, player_info.networkid, JoinStatus.CONNECTED))
+                    else:
+                        tester:Tester = testers[networkid]
+                        if tester.status != JoinStatus.CONNECTED:
+                            player_status_queue.put(PlayerJoinStatus(player_info.name, player_info.networkid, JoinStatus.CONNECTED))
+
+
+                testers_mutex.release()
+            
+            time.sleep(1.0)
 
 class aclient(discord.Client):
     def __init__(self):
@@ -164,43 +157,60 @@ class aclient(discord.Client):
         print(f"We have logged in as {self.user}.")
     
     async def handle_task_playtest(self):
-        stop_thread = False # TODO: Use threading.Event instead
 
         # TODO: It should be possible to ditch using a thread and opt for coroutines with async/await
         # The issue is the socket API on its own is not asynchronous
-        listen_thread = threading.Thread(target=logaddress_listen_thread, args=(lambda: stop_thread,))
-        listen_thread.start()
+        rcon_thread:RCONThread = RCONThread()
+        rcon_thread.start()
+
+        # TODO: We may want to buffer join/disconnect messages before sending them in Discord
 
         while not self.is_closed() and bTestActive:
             if player_status_queue.qsize() > 0:
                 try:
                     player_status:PlayerJoinStatus = player_status_queue.get_nowait()
+                    testers_mutex.acquire()
 
                     if player_status.status == JoinStatus.CONNECTED:
-                        testers[player_status.steamid] = Tester(
-                            steamid=player_status.steamid,
-                            name=player_status.name,
-                            jointime=int(time.time())
-                        )
+                        announce_join:bool = False
 
-                        if testing_channel_id != -1:
+                        if player_status.networkid not in testers:
+                            testers[player_status.networkid] = Tester(
+                                networkid=player_status.networkid,
+                                name=player_status.name,
+                                jointime=int(time.time()),
+                                status=JoinStatus.CONNECTED
+                            )
+
+                            announce_join = True
+                        else:
+                            tester:Tester = testers[player_status.networkid]
+                            if tester.status != JoinStatus.CONNECTED:
+                                tester.status = JoinStatus.CONNECTED
+                                announce_join = True
+                    
+                        if announce_join and testing_channel_id != -1:
                             msg:str = f"{player_status.name} joined the test."
                             await self.get_channel(testing_channel_id).send(msg)
                     
                     if player_status.status == JoinStatus.DISCONNECTED:
-                        if player_status.steamid in testers:
-                            testers[player_status.steamid].endtime = time.time()
+                        if player_status.networkid in testers:
+                            tester:Tester = testers[player_status.networkid]
+                            tester.endtime = time.time()
+                            tester.status = JoinStatus.DISCONNECTED
 
                             if testing_channel_id != -1:
                                 msg:str = f"{player_status.name} left the test."
                                 await self.get_channel(testing_channel_id).send(msg)
+                    
+                    testers_mutex.release()
                 except queue.Empty:
                     pass
 
             await asyncio.sleep(1.0)
         
-        stop_thread = True
-        listen_thread.join()
+        rcon_thread.stop()
+        rcon_thread.join()
 
 client = aclient()
 
@@ -297,7 +307,7 @@ async def slash_tstart(interaction: discord.Interaction):
     else:
         msg = "Test started."
         bTestActive = True
-        testers.clear()
+        testers.clear() # Shouldn't need testers_mutex here
         client.task_playtest = client.loop.create_task(client.handle_task_playtest())
 
     await interaction.response.send_message(msg)
@@ -312,6 +322,7 @@ async def slash_tstop(interaction: discord.Interaction):
         date_object = datetime.date.today()
         msg = f"Today's test has ended.\nPlayers in attendance for {date_object}\n```\n"
 
+        testers_mutex.acquire()
         for x in testers.values():
             if x.endtime == -1:
                 x.endtime = int(time.time())
@@ -323,53 +334,9 @@ async def slash_tstop(interaction: discord.Interaction):
         msg += "```"
         bTestActive = False
         testers.clear()
+        testers_mutex.release()
 
     await interaction.response.send_message(msg)
-
-'''
-# /join
-@tree.command(guild=None, name='join', description='Join an active test.')
-async def slash_join(interaction: discord.Interaction):
-    global bTestActive
-    if bTestActive == False:
-        msg = "No test active."
-    else:
-        bJoined = False
-
-        for x in testers:
-            if x.id == interaction.user.id:
-                if x.endtime == -1:
-                    msg = "You've already joined the test."
-                else:
-                    x.endtime = -1
-                    msg = f"{interaction.user.display_name} rejoined the test."
-
-                bJoined = True
-
-        if bJoined == False:
-            now = int(time.time())
-            entry = Tester(interaction.user.id,
-                           interaction.user.display_name, now)
-            testers.append(entry)
-            msg = f"{interaction.user.display_name} joined the test."
-
-    await interaction.response.send_message(msg)
-
-# /leave
-@tree.command(guild=None, name='leave', description='Leave an active test.')
-async def slash_leave(interaction: discord.Interaction):
-    global bTestActive
-    if bTestActive == False:
-        msg = "No test active."
-    else:
-        for x in testers:
-            if x.id == interaction.user.id:
-                x.endtime = int(time.time())
-
-        msg = f"{interaction.user.display_name} left the test."
-
-    await interaction.response.send_message(msg)
-'''
 
 # /pingrole
 # hardcoded right now :)
