@@ -45,16 +45,21 @@ class PlayerInfo:
         self.userid = userid
 
 class RCONInfo:
-    def __init__(self, address:str, port:int, password:str) -> None:
+    def __init__(self, address:str, port:int, password:str, comment:str = '') -> None:
         self.address = address
         self.port = port
         self.password = password
+        self.comment = comment
+
+CONFIG_FILE_NAME = "config.json"
+TEST_CHANGES_FILE_NAME = "test_changes.json"
 
 bTestActive = False
 test_changes = []
 testers:dict = {}
 testers_mutex:Lock = Lock()
-rcon_infos:list = []
+rcon_infos_mutex:Lock = Lock()
+rcon_infos:dict = {}
 
 token = os.getenv("DISCORD_TOKEN")
 
@@ -70,22 +75,96 @@ if testing_channel_id == -1:
 
 try:
     # TODO: Perhaps move the above environment variable stuff to this config?
-    file = open("config.json", 'r')
+    file = open(CONFIG_FILE_NAME, 'r')
     data:dict = json.load(file)
 
     rcon_info:dict
     for rcon_info in data["rcon"]:
         # Append RCON information instead of creating an instance of 'rcon'
         # As we don't know when a server is gonna go offline
-        rcon_infos.append(RCONInfo(
-            rcon_info["address"],
-            rcon_info["port"],
-            rcon_info["password"]
-        ))
+        # NOTE: Don't need rcon_infos_mutex here, we're starting up
+        address:str = rcon_info["address"]
+        port:int = rcon_info["port"]
+        password:str = rcon_info["password"]
+        comment:str = rcon_info["comment"]
+
+        rcon_infos[f"{address}:{port}"] = RCONInfo(
+            address,
+            port,
+            password,
+            comment
+        )
 
 except IOError as e:
     print(f"Failed to load config.json: {e}")
     pass
+
+def save_config() -> bool:
+    config:dict = {
+        "rcon": []
+    }
+
+    rcon_list:list = config["rcon"]
+
+    rcon_infos_mutex.acquire()
+    rcon_info:RCONInfo
+    for rcon_info in rcon_infos.values():
+        rcon_list.append(
+            {
+                "address": rcon_info.address,
+                "port": rcon_info.port,
+                "password": rcon_info.password,
+                "comment": rcon_info.comment
+            }
+        )
+    rcon_infos_mutex.release()
+
+    try:
+        file = open(CONFIG_FILE_NAME, 'w')
+        file.write(json.dumps(config, indent=4))
+        file.close()
+    except IOError as e:
+        print(f"Failed to save config: {e}")
+        return False
+    
+    return True
+
+def save_test_changes() -> None:
+    data:dict = {"changes": []}
+    changes:list = data["changes"]
+
+    change:TestChange
+    for change in test_changes:
+        changes.append(
+            {
+                "author": change.author,
+                "change": change.change
+            }
+        )
+    try:
+        file = open(TEST_CHANGES_FILE_NAME, 'w')
+        file.write(json.dumps(data, indent=4))
+        
+        file.close()
+    except IOError as e:
+        print(f"Failed to save test changes: {e}")
+
+def load_test_changes() -> None:
+    try:
+        file = open(TEST_CHANGES_FILE_NAME, 'r')
+        data:dict = json.load(file)
+        test_changes.clear()
+
+        changes:list = data["changes"]
+        change:dict
+
+        for change in changes:
+            test_changes.append(TestChange(change["change"], change["author"]))
+        
+    except IOError as e:
+        pass # Failure is acceptable here
+
+load_test_changes()
 
 intents = discord.Intents.default()
 
@@ -101,13 +180,14 @@ class RCONThread(Thread):
 
     def run(self) -> None:
         while not self.should_stop.is_set():
-            for info in rcon_infos:
+            player_data:dict = {}
+
+            rcon_infos_mutex.acquire()
+            for info in rcon_infos.values():
                 player_info:list = rcon(info.address, info.port, info.password, silent=True).exec_command("player_info").splitlines()
 
                 NETWORKID:int = 0
                 USERID:int = 1
-
-                player_data:dict = {}
 
                 for line in player_info:
                     split_line:list = line.split()
@@ -120,27 +200,28 @@ class RCONThread(Thread):
                         split_line[NETWORKID],
                         split_line[USERID]
                     )
-
-                testers_mutex.acquire()
-
-                for networkid in testers:
-                    if networkid not in player_data:
-                        tester:Tester = testers[networkid]
-                        if tester.status != JoinStatus.DISCONNECTED:
-                            player_status_queue.put(PlayerJoinStatus(tester.name, tester.networkid, JoinStatus.DISCONNECTED))
-                
-                for networkid in player_data:
-                    player_info:PlayerInfo = player_data[networkid]
-                    if networkid not in testers:
-                        player_status_queue.put(PlayerJoinStatus(player_info.name, player_info.networkid, JoinStatus.CONNECTED))
-                    else:
-                        tester:Tester = testers[networkid]
-                        if tester.status != JoinStatus.CONNECTED:
-                            player_status_queue.put(PlayerJoinStatus(player_info.name, player_info.networkid, JoinStatus.CONNECTED))
-
-
-                testers_mutex.release()
             
+            rcon_infos_mutex.release()
+            testers_mutex.acquire()
+
+            # Do all this after gathering player data or else multiple servers will cause a join/disconnect loop
+            for networkid in testers:
+                if networkid not in player_data:
+                    tester:Tester = testers[networkid]
+                    if tester.status != JoinStatus.DISCONNECTED:
+                        player_status_queue.put(PlayerJoinStatus(tester.name, tester.networkid, JoinStatus.DISCONNECTED))
+            
+            for networkid in player_data:
+                player_info:PlayerInfo = player_data[networkid]
+                if networkid not in testers:
+                    player_status_queue.put(PlayerJoinStatus(player_info.name, player_info.networkid, JoinStatus.CONNECTED))
+                else:
+                    tester:Tester = testers[networkid]
+                    if tester.status != JoinStatus.CONNECTED:
+                        player_status_queue.put(PlayerJoinStatus(player_info.name, player_info.networkid, JoinStatus.CONNECTED))
+
+
+            testers_mutex.release()
             time.sleep(1.0)
 
 class aclient(discord.Client):
@@ -266,6 +347,8 @@ async def slash_tca(interaction: discord.Interaction, change: str):
     test_changes.append(new_change)
     msg = f"Added change for next test: {new_change.change}"
 
+    save_test_changes()
+
     await interaction.response.send_message(msg)
 
 # /tce
@@ -276,6 +359,8 @@ async def slash_tce(interaction: discord.Interaction, index: int, change: str):
     else:
         test_changes[index].change = change
         msg = f"Edited change #{index}: {test_changes[index].change}"
+    
+    save_test_changes()
 
     await interaction.response.send_message(msg)
 
@@ -288,6 +373,8 @@ async def slash_tcr(interaction: discord.Interaction, index: int):
         msg = f"Removed change: {test_changes[index].change}"
         test_changes.pop(index)
 
+    save_test_changes()
+
     await interaction.response.send_message(msg)
 
 # /tcpurge
@@ -295,6 +382,8 @@ async def slash_tcr(interaction: discord.Interaction, index: int):
 async def slash_tcpurge(interaction: discord.Interaction):
     test_changes.clear()
     msg = "All changes cleared."
+
+    save_test_changes()
 
     await interaction.response.send_message(msg)
 
@@ -349,5 +438,78 @@ async def slash_pingrole(interaction: discord.Interaction):
         msg = "You have no access to this command."
     
     await interaction.response.send_message(msg)
+
+# /showts
+@tree.command(guild=None, name="showts", description="Show registered test servers")
+async def slash_showts(interaction: discord.Interaction):
+    msg = f"Currently registered test servers:\n```\n"
+    rcon_infos_mutex.acquire()
+    rcon_info:RCONInfo
+
+    # TODO: Should maybe add message splitting like test changes
+    # But I doubt we'll ever have that many test servers
+    for rcon_info in rcon_infos.values():
+        msg += f"{rcon_info.address}:{rcon_info.port} => {rcon_info.comment}\n"
+
+    rcon_infos_mutex.release()
+
+    msg += "```"
+    await interaction.response.send_message(msg)
+
+# /addts
+@tree.command(guild=None, name="addts", description="Add test server for tracking Ex: /addts ip port \"password\" \"server name\"")
+async def slash_addts(interaction: discord.Interaction, address:str, port:int, password:str, comment:str):
+    if len(password) == 0:
+        await interaction.response.send_message(f"No password provided", ephemeral=True)
+        return
+    
+    if len(comment) == 0:
+        await interaction.response.send_message(f"No server name provided", ephemeral=True)
+        return
+
+    rcon_infos_mutex.acquire()
+    if f"{address}:{port}" in rcon_infos:
+        await interaction.response.send_message(f"{address}:{port} already in server list", ephemeral=True)
+        rcon_infos_mutex.release()
+        return
+    
+    if port < 0 or port > 65535:
+        await interaction.response.send_message(f"{port} is not a valid port", ephemeral=True)
+        rcon_infos_mutex.release()
+        return
+    
+    rcon_infos[f"{address}:{port}"] = RCONInfo(address, port, password, comment)
+    rcon_infos_mutex.release()
+
+    msg:str = f"Added {address}:{port} => {comment}"
+
+    if not save_config():
+        msg += "\nWARNING: Failed to save config, server won't be available on bot reboot"
+
+    await interaction.response.send_message(msg, ephemeral=True)
+
+# /remts
+@tree.command(guild=None, name="remts", description="Remove a test server from tracking Ex: /remts ip port")
+async def slash_remts(interaction: discord.Interaction, address:str, port:int):
+    full_address = f"{address}:{port}"
+    was_removed:bool = False
+    rcon_infos_mutex.acquire()
+
+    if full_address in rcon_infos:
+        rcon_infos.pop(full_address)
+        was_removed = True
+    
+    rcon_infos_mutex.release()
+
+    if was_removed:
+        msg = f"Removed {address}:{port} from test tracking"
+
+        if not save_config():
+            msg += "\nWARNING: Failed to save config, server won't be available on bot reboot"
+
+        await interaction.response.send_message(msg)
+    else:
+        await interaction.response.send_message(f"{address}:{port} was not found")
+
 
 client.run(token)
