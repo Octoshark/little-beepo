@@ -69,12 +69,23 @@ class rcon:
 	def is_ready(self) -> bool:
 		return self.is_open and self.is_authorized
 	
-	def send(self, id:int, type:int, body:str):		
+	def send(self, id:int, type:int, body:str):
 		data:bytes = packet(id, type, body).to_bytes()
-		self.sock.send(data)
+
+		try:
+			self.sock.send(data)
+		except:
+			self.is_open = False
+			self.sock.close()
 	
 	def recv(self):
-		data:bytes = self.sock.recv(4)
+		try:
+			data:bytes = self.sock.recv(4)
+		except:
+			self.is_open = False
+			self.sock.close()
+			return packet(PACKETID_INVALID, SERVERDATA_INVALID, '')
+
 		size:int = int.from_bytes(data, "little", signed=True)
 
 		try:
@@ -83,7 +94,6 @@ class rcon:
 		except: # I'd really prefer only catch exceptions we care about, but it looks like we can get platform-specific exceptions
 			self.is_open = False
 			self.sock.close()
-			pass
 
 		return packet(PACKETID_INVALID, SERVERDATA_INVALID, '')
 	
