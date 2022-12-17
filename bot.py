@@ -140,7 +140,7 @@ async def slash_tcl(interaction: discord.Interaction):
     await interaction.response.send_message(msg, ephemeral=False)
 
 # /tca
-@tree.command(guild=None, name='tca', description='Add test change by list index. Ex: /tca Modified a model, map, functionality, etc...')
+@tree.command(guild=None, name='tca', description='Add test change. Ex: /tca Modified a model, map, functionality, etc...')
 async def slash_tca(interaction: discord.Interaction, change: str):
     new_change = TestChange(change, interaction.user.display_name)
     testing.test_changes.append(new_change)
