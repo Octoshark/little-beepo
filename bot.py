@@ -25,7 +25,7 @@ class aclient(discord.Client):
     def __init__(self):
         super().__init__(intents=intents)
         self.synced:bool = False
-        self.task_playtest = None
+        self.task_playtest:asyncio.Task
 
     async def on_ready(self):
         await self.wait_until_ready()
@@ -39,59 +39,57 @@ class aclient(discord.Client):
         # TODO: It should be possible to ditch using a thread and opt for coroutines with async/await
         # The issue is the socket API on its own is not asynchronous
 
-        # TODO: We may want to buffer join/disconnect messages before sending them in Discord
+        msg:str = ''
+
         threads.rcon = RCONThread()
         threads.rcon.start()
 
-        while not self.is_closed() and testing.test_active:
-            if testing.player_status_queue.qsize() > 0:
-                try:
-                    player_status:PlayerJoinStatus = testing.player_status_queue.get_nowait()
-                    locks.testers.acquire()
+        while testing.test_active:
+            if testing.player_status_queue.qsize() == 0:
+                if len(msg) > 0:
+                    # TODO: We should probably handle message splitting, but hopefully we won't exceed 2000 characters
+                    await self.get_channel(testing.testing_channel_id).send(msg)
+                    msg = ''
+                await asyncio.sleep(1.0)
+                continue
 
-                    if player_status.status == JoinStatus.CONNECTED:
-                        announce_join:bool = False
+            try:
+                player_status:PlayerJoinStatus = testing.player_status_queue.get_nowait()
+                locks.testers.acquire()
 
-                        if player_status.networkid not in testing.testers:
-                            testing.testers[player_status.networkid] = Tester(
-                                networkid=player_status.networkid,
-                                name=player_status.name,
-                                jointime=int(time.time()),
-                                status=JoinStatus.CONNECTED
-                            )
+                if player_status.status == JoinStatus.CONNECTED:
+                    announce_join:bool = False
 
+                    if player_status.networkid not in testing.testers:
+                        testing.testers[player_status.networkid] = Tester(
+                            networkid=player_status.networkid,
+                            name=player_status.name,
+                            jointime=int(time.time()),
+                            status=JoinStatus.CONNECTED
+                        )
+
+                        announce_join = True
+                    else:
+                        tester:Tester = testing.testers[player_status.networkid]
+                        if tester.status != JoinStatus.CONNECTED:
+                            tester.status = JoinStatus.CONNECTED
                             announce_join = True
-                        else:
-                            tester:Tester = testing.testers[player_status.networkid]
-                            if tester.status != JoinStatus.CONNECTED:
-                                tester.status = JoinStatus.CONNECTED
-                                announce_join = True
-                    
-                        if announce_join and testing.testing_channel_id != -1:
-                            msg:str = f"{player_status.name} joined the test."
-                            await self.get_channel(testing.testing_channel_id).send(msg)
-                    
-                    if player_status.status == JoinStatus.DISCONNECTED:
-                        if player_status.networkid in testing.testers:
-                            tester:Tester = testing.testers[player_status.networkid]
-                            tester.endtime = time.time()
-                            tester.status = JoinStatus.DISCONNECTED
+                
+                    if announce_join and testing.testing_channel_id != -1:
+                        msg += f"{player_status.name} joined the test.\n"
+                
+                if player_status.status == JoinStatus.DISCONNECTED:
+                    if player_status.networkid in testing.testers:
+                        tester:Tester = testing.testers[player_status.networkid]
+                        tester.endtime = time.time()
+                        tester.status = JoinStatus.DISCONNECTED
 
-                            if testing.testing_channel_id != -1:
-                                msg:str = f"{player_status.name} left the test."
-                                await self.get_channel(testing.testing_channel_id).send(msg)
-                    
-                    locks.testers.release()
-                except queue.Empty:
-                    pass
-
-            await asyncio.sleep(1.0)
-        
-        if threads.rcon.is_alive():
-            threads.rcon.stop()
-            threads.rcon.join()
-        
-        testing.player_status_queue = Queue()
+                        if testing.testing_channel_id != -1:
+                            msg += f"{player_status.name} left the test.\n"
+                
+                locks.testers.release()
+            except queue.Empty:
+                pass
 
 client = aclient()
 
@@ -126,6 +124,7 @@ async def slash_tcl(interaction: discord.Interaction):
                 else:
                     msg = tag + content + tag
 
+                # FIXME: Responding to the same interaction multiple times raises exceptions
                 await interaction.response.send_message(msg, ephemeral=False)
 
                 bSplit = True
@@ -209,6 +208,19 @@ async def slash_tstop(interaction: discord.Interaction):
         date_object = datetime.date.today()
         msg = f"Today's test has ended.\nPlayers in attendance for {date_object}\n```\n"
 
+        testing.test_active = False
+
+        try:
+            client.task_playtest.cancel()
+        except:
+            pass
+
+        if threads.rcon.is_alive():
+            threads.rcon.stop()
+            threads.rcon.join()
+        
+        testing.player_status_queue.queue.clear()
+
         locks.testers.acquire()
         for x in testing.testers.values():
             if x.endtime == -1:
@@ -219,7 +231,6 @@ async def slash_tstop(interaction: discord.Interaction):
             msg += f"{x.name} was present for {timestr}\n"
 
         msg += "```"
-        testing.test_active = False
         testing.testers.clear()
         locks.testers.release()
 
