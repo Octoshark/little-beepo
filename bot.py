@@ -91,14 +91,33 @@ class aclient(discord.Client):
             except queue.Empty:
                 pass
 
+    # have some grease?
+    misery_level:int = 0
+
 client = aclient()
 
 tree = app_commands.CommandTree(client)
 
-# test slash commands
+# /misery
 @tree.command(guild=None, name='misery', description='Increase misery. (Use with care!)')
 async def slash_misery(interaction: discord.Interaction):
+    client.misery_level += 1
+
+    msg = f"Misery Level: {client.misery_level}"
+    await client.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=msg))
+
     await interaction.response.send_message(f"Little Beepo's misery is increasing.", ephemeral=True)
+
+# /givegrease
+@tree.command(guild=None, name='givegrease', description='Decrease misery by giving Little Beepo some grease from the stovetop.')
+async def slash_givegrease(interaction: discord.Interaction):
+    # purposely not clamped :)
+    client.misery_level -= 1
+
+    msg = f"Misery Level: {client.misery_level}"
+    await client.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=msg))
+
+    await interaction.response.send_message(f"Little Beepo's misery is decreasing.", ephemeral=True)
 
 # /tcl
 @tree.command(guild=None, name='tcl', description='List changes for next test.')
