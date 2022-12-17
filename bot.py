@@ -384,6 +384,7 @@ async def slash_remts(interaction: discord.Interaction, address:str, port:int):
         await interaction.response.send_message(config.msg_bad_channel, ephemeral=True)
         return
 
+    role = discord.utils.find(lambda r: r.name == config.coordinator_role_name, interaction.guild.roles)
     if role not in interaction.user.roles:
         await interaction.response.send_message(config.msg_access_denied, ephemeral=True)
         return
