@@ -10,6 +10,12 @@ CONFIG_FILE_NAME = "config.json"
 
 discord_token:str = os.getenv("DISCORD_TOKEN")
 
+# TODO: Move to config?
+coordinator_role_name:str = "Test Coordinator"
+
+msg_access_denied:str = "You have no access to this command."
+msg_bad_channel:str = "Command not allowed in this channel."
+
 def load_config() -> None:
     try:
         # TODO: Perhaps move the above environment variable stuff to this config?

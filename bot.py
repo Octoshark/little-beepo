@@ -103,6 +103,10 @@ async def slash_misery(interaction: discord.Interaction):
 # /tcl
 @tree.command(guild=None, name='tcl', description='List changes for next test.')
 async def slash_tcl(interaction: discord.Interaction):
+    if interaction.channel_id != testing.testing_channel_id:
+        await interaction.response.send_message(config.msg_bad_channel, ephemeral=True)
+        return
+
     if len(testing.test_changes) == 0:
         msg = "Changes to test:\nNone.\n"
     else:
@@ -142,6 +146,10 @@ async def slash_tcl(interaction: discord.Interaction):
 # /tca
 @tree.command(guild=None, name='tca', description='Add test change. Ex: /tca Modified a model, map, functionality, etc...')
 async def slash_tca(interaction: discord.Interaction, change: str):
+    if interaction.channel_id != testing.testing_channel_id:
+        await interaction.response.send_message(config.msg_bad_channel, ephemeral=True)
+        return
+    
     new_change = TestChange(change, interaction.user.display_name)
     testing.test_changes.append(new_change)
     msg = f"Added change for next test: {new_change.change}"
@@ -153,6 +161,10 @@ async def slash_tca(interaction: discord.Interaction, change: str):
 # /tce
 @tree.command(guild=None, name='tce', description='Edit existing test change by list index. Ex: /tce 0 Fix a typo...')
 async def slash_tce(interaction: discord.Interaction, index: int, change: str):
+    if interaction.channel_id != testing.testing_channel_id:
+        await interaction.response.send_message(config.msg_bad_channel, ephemeral=True)
+        return
+
     if index >= len(testing.test_changes) or index < 0:
         msg = "Index out of range."
     else:
@@ -166,6 +178,10 @@ async def slash_tce(interaction: discord.Interaction, index: int, change: str):
 # /tcr
 @tree.command(guild=None, name='tcr', description='Remove test change by list index. Ex: /tcr 1')
 async def slash_tcr(interaction: discord.Interaction, index: int):
+    if interaction.channel_id != testing.testing_channel_id:
+        await interaction.response.send_message(config.msg_bad_channel, ephemeral=True)
+        return
+
     if index >= len(testing.test_changes) or index < 0:
         msg = "Index out of range."
     else:
@@ -179,6 +195,15 @@ async def slash_tcr(interaction: discord.Interaction, index: int):
 # /tcpurge
 @tree.command(guild=None, name='tcpurge', description='Remove all changes.')
 async def slash_tcpurge(interaction: discord.Interaction):
+    if interaction.channel_id != testing.testing_channel_id:
+        await interaction.response.send_message(config.msg_bad_channel, ephemeral=True)
+        return
+
+    role = discord.utils.find(lambda r: r.name == config.coordinator_role_name, interaction.guild.roles)
+    if role not in interaction.user.roles:
+        await interaction.response.send_message(config.msg_access_denied, ephemeral=True)
+        return
+
     testing.test_changes.clear()
     msg = "All changes cleared."
 
@@ -189,6 +214,15 @@ async def slash_tcpurge(interaction: discord.Interaction):
 # /tstart
 @tree.command(guild=None, name='tstart', description='Start tracking a test.')
 async def slash_tstart(interaction: discord.Interaction):
+    if interaction.channel_id != testing.testing_channel_id:
+        await interaction.response.send_message(config.msg_bad_channel, ephemeral=True)
+        return
+
+    role = discord.utils.find(lambda r: r.name == config.coordinator_role_name, interaction.guild.roles)
+    if role not in interaction.user.roles:
+        await interaction.response.send_message(config.msg_access_denied, ephemeral=True)
+        return
+
     if testing.test_active == True:
         msg = "Test already active, stop it first."
     else:
@@ -202,6 +236,15 @@ async def slash_tstart(interaction: discord.Interaction):
 # /tstop
 @tree.command(guild=None, name='tstop', description='Stop tracking a test.')
 async def slash_tstop(interaction: discord.Interaction):
+    if interaction.channel_id != testing.testing_channel_id:
+        await interaction.response.send_message(config.msg_bad_channel, ephemeral=True)
+        return
+
+    role = discord.utils.find(lambda r: r.name == config.coordinator_role_name, interaction.guild.roles)
+    if role not in interaction.user.roles:
+        await interaction.response.send_message(config.msg_access_denied, ephemeral=True)
+        return
+
     if testing.test_active == False:
         msg = "No test active, start it first."
     else:
@@ -240,17 +283,26 @@ async def slash_tstop(interaction: discord.Interaction):
 # hardcoded right now :)
 @tree.command(guild=None, name='pingrole', description='Mention tester role.')
 async def slash_pingrole(interaction: discord.Interaction):
-    role = discord.utils.find(lambda r: r.name == 'Test Coordinator', interaction.guild.roles)
-    if role in interaction.user.roles:
-        msg = f"<@&307979412903821323> <@&1049422754602025053> Test starting soon."
-    else:
-        msg = "You have no access to this command."
-    
+    if interaction.channel_id != testing.testing_channel_id:
+        await interaction.response.send_message(config.msg_bad_channel, ephemeral=True)
+        return
+
+    role = discord.utils.find(lambda r: r.name == config.coordinator_role_name, interaction.guild.roles)
+    if role not in interaction.user.roles:
+        await interaction.response.send_message(config.msg_access_denied, ephemeral=True)
+        return
+
+    msg = f"<@&307979412903821323> <@&1049422754602025053> Test starting soon."
+
     await interaction.response.send_message(msg)
 
 # /showts
 @tree.command(guild=None, name="showts", description="Show registered test servers")
 async def slash_showts(interaction: discord.Interaction):
+    if interaction.channel_id != testing.testing_channel_id:
+        await interaction.response.send_message(config.msg_bad_channel, ephemeral=True)
+        return
+
     msg = f"Currently registered test servers:\n```\n"
     locks.rcon.acquire()
     rcon_info:RCONInfo
@@ -268,6 +320,15 @@ async def slash_showts(interaction: discord.Interaction):
 # /addts
 @tree.command(guild=None, name="addts", description="Add test server for tracking Ex: /addts ip port \"password\" \"server name\"")
 async def slash_addts(interaction: discord.Interaction, address:str, port:int, password:str, comment:str):
+    if interaction.channel_id != testing.testing_channel_id:
+        await interaction.response.send_message(config.msg_bad_channel, ephemeral=True)
+        return
+
+    role = discord.utils.find(lambda r: r.name == config.coordinator_role_name, interaction.guild.roles)
+    if role not in interaction.user.roles:
+        await interaction.response.send_message(config.msg_access_denied, ephemeral=True)
+        return
+    
     if len(password) == 0:
         await interaction.response.send_message(f"No password provided", ephemeral=True)
         return
@@ -300,6 +361,14 @@ async def slash_addts(interaction: discord.Interaction, address:str, port:int, p
 # /remts
 @tree.command(guild=None, name="remts", description="Remove a test server from tracking Ex: /remts ip port")
 async def slash_remts(interaction: discord.Interaction, address:str, port:int):
+    if interaction.channel_id != testing.testing_channel_id:
+        await interaction.response.send_message(config.msg_bad_channel, ephemeral=True)
+        return
+
+    if role not in interaction.user.roles:
+        await interaction.response.send_message(config.msg_access_denied, ephemeral=True)
+        return
+
     full_address = f"{address}:{port}"
     was_removed:bool = False
     locks.rcon.acquire()
