@@ -81,7 +81,7 @@ class aclient(discord.Client):
                 if player_status.status == JoinStatus.DISCONNECTED:
                     if player_status.networkid in testing.testers:
                         tester:Tester = testing.testers[player_status.networkid]
-                        tester.endtime = time.time()
+                        tester.endtime = int(time.time())
                         tester.status = JoinStatus.DISCONNECTED
 
                         if testing.testing_channel_id != -1:
