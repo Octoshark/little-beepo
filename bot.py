@@ -41,6 +41,7 @@ class aclient(discord.Client):
 
         # TODO: We may want to buffer join/disconnect messages before sending them in Discord
         threads.rcon = RCONThread()
+        threads.rcon.start()
 
         while not self.is_closed() and testing.test_active:
             if testing.player_status_queue.qsize() > 0:
@@ -196,7 +197,6 @@ async def slash_tstart(interaction: discord.Interaction):
         testing.test_active = True
         testing.testers.clear() # Shouldn't need locks.testers here
         client.task_playtest = client.loop.create_task(client.handle_task_playtest())
-        client.task_playtest.cancel()
 
     await interaction.response.send_message(msg)
 
