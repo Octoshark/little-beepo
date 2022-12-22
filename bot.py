@@ -312,9 +312,13 @@ async def slash_pingrole(interaction: discord.Interaction):
         await interaction.response.send_message(config.msg_access_denied, ephemeral=True)
         return
 
-    msg = f"<@&307979412903821323> <@&1049422754602025053> Test starting soon."
+    msg:str = ''
 
-    await interaction.response.send_message(msg)
+    for role_id in config.ping_roles:
+        msg += f"<@&{role_id}> "
+    
+    msg += "Test starting soon."
+    await interaction.response.send_message(msg, allowed_mentions=discord.AllowedMentions(roles=True))
 
 # /showts
 @tree.command(guild=None, name="showts", description="Show registered test servers")

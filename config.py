@@ -16,11 +16,17 @@ coordinator_role_name:str = "Test Coordinator"
 msg_access_denied:str = "You have no access to this command."
 msg_bad_channel:str = "Command not allowed in this channel."
 
+ping_roles:list = []
+
 def load_config() -> None:
     try:
         # TODO: Perhaps move the above environment variable stuff to this config?
         file = open(CONFIG_FILE_NAME, 'r')
         data:dict = json.load(file)
+
+        role:int
+        for role in data["pingroles"]:
+            ping_roles.append(int(role)) # Explicit cast so we can catch ValueErrors
 
         rcon_info:dict
         for rcon_info in data["rcon"]:
@@ -28,7 +34,7 @@ def load_config() -> None:
             # As we don't know when a server is gonna go offline
             # NOTE: Don't need rcon lock here, we're starting up
             address:str = rcon_info["address"]
-            port:int = rcon_info["port"]
+            port:int = int(rcon_info["port"])
             password:str = rcon_info["password"]
             comment:str = rcon_info["comment"]
 
@@ -41,11 +47,13 @@ def load_config() -> None:
 
     except IOError as e:
         print(f"Failed to load config.json: {e}")
-        pass
+    except ValueError as e:
+        print(f"{e}\nDid you use the wrong type in config.json?\n")
 
 def save_config() -> bool:
     config:dict = {
-        "rcon": []
+        "rcon": [],
+        "pingroles": ping_roles
     }
 
     rcon_list:list = config["rcon"]
