@@ -6,6 +6,7 @@ import config
 import testing
 import locks
 import threads
+import random
 import discord
 from discord import app_commands
 from queue import Queue
@@ -408,6 +409,41 @@ async def slash_remts(interaction: discord.Interaction, address:str, port:int):
         await interaction.response.send_message(msg)
     else:
         await interaction.response.send_message(f"{address}:{port} was not found")
+
+# /8ball
+@tree.command(guild=None, name="8ball", description="Ask the magic 8 ball questions")
+async def slash_8ball(interaction: discord.Interaction, question:str):
+    # TODO (Maybe): We could rig this and make neutral/negative responses more likely depending on misery level
+    responses:list = [
+        "It is certain.",
+        "It is decidedly so.",
+        "Without a doubt.",
+        "Yes definitely.",
+        "You may rely on it.",
+        "As I see it, yes.",
+        "Most likely.",
+        "Outlook good.",
+        "Yes.",
+        "Signs point to yes.",
+        
+        "Reply hazy, try again.",
+        "Ask again later.",
+        "Better not tell you now.",
+        "Cannot predict now.",
+        "Concentrate and ask again.",
+
+        "Don't count on it.",
+        "My reply is no.",
+        "My sources say no.",
+        "Outlook not so good.",
+        "Very doubtful."
+    ]
+    
+    response:int = random.randint(0, len(responses) - 1)
+    msg:str = f'"{question}"\n{responses[response]}'
+
+    await interaction.response.send_message(msg)
+
 
 def main():
     # Was gonna try to add the ability to reboot the bot, but this Discord API just raises exceptions no matter what
