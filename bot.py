@@ -440,7 +440,52 @@ async def slash_8ball(interaction: discord.Interaction, question:str):
         "My reply is no.",
         "My sources say no.",
         "Outlook not so good.",
-        "Very doubtful."
+        "Very doubtful.",
+
+        # snarky replies from the original RandomCat
+        "If you say so",
+        "In your dreams",
+        "My CPU is saying, no",
+        "My CPU is saying, yes",
+        "Out of psychic coverage range",
+        "Sure, sure",
+        "When life gives you rice, you make rice",
+        "Yes, definitely",
+        "You are doomed",
+        "You can't handle the truth",
+        "Answer not found",
+        "Blame Felis",
+        "https://i.imgur.com/PDNpr2a.jpg",
+        "Stop bothering me",
+        "Question is too stupid to answer",
+        "Smug grin... *beep* initiated :grin:"
+        "ｷﾀ━━━━━━(ﾟ∀ﾟ)━━━━━━ !!!!"
+        "What's wrong with you?"
+        "Sure, why not?"
+        "I don't care"
+        "Pfft, obviously yes!"
+        "That's the most dumbest thing I have heard today"
+        "Perhaps..."
+        "Yeah... NO!"
+        "I can't answer that."
+        "https://www.youtube.com/watch?v=AA-S8CGoFug"
+        "You wish..."
+        "Are you kidding me?"
+        "Well maybe..."
+        "Forget about it!"
+        "The odds are not good."
+        "Oh please."
+        "Whatever..."
+        "Get checked!"
+        "Obviously."
+        "Sure."
+        "Get a clue."
+        "Yeah, right."
+        ":fingers_crossed:"
+        "Not."
+        "Well... maybe."
+        "Who cares?"
+        "Enough of this!"
     ]
     
     response:int = random.randint(0, len(responses) - 1)
