@@ -126,6 +126,8 @@ async def slash_tcl(interaction: discord.Interaction):
     if interaction.channel_id != testing.testing_channel_id:
         await interaction.response.send_message(config.msg_bad_channel, ephemeral=True)
         return
+    
+    await interaction.response.defer()
 
     if len(testing.test_changes) == 0:
         msg = "Changes to test:\nNone.\n"
@@ -148,8 +150,7 @@ async def slash_tcl(interaction: discord.Interaction):
                 else:
                     msg = tag + content + tag
 
-                # FIXME: Responding to the same interaction multiple times raises exceptions
-                await interaction.response.send_message(msg, ephemeral=False)
+                await interaction.followup.send(msg, ephemeral=False)
 
                 bSplit = True
                 content = ""
@@ -161,7 +162,7 @@ async def slash_tcl(interaction: discord.Interaction):
         elif len(content) > 0:
             msg = tag + content + tag
 
-    await interaction.response.send_message(msg, ephemeral=False)
+    await interaction.followup.send(msg, ephemeral=False)
 
 # /tca
 @tree.command(guild=None, name='tca', description='Add test change. Ex: /tca Modified a model, map, functionality, etc...')
